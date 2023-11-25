@@ -158,6 +158,21 @@ async function run() {
       res.send(result);
     });
 
+    // admin routes
+
+    app.get("/users/isadmin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const tokenEmail = req.decoded.email;
+      if (email !== tokenEmail) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const admin = user.role === "admin";
+      // if(!isAdmin)
+      return { admin };
+    });
+
     // get the stats
     app.get("/stats", async (req, res) => {
       const userTotal = await usersCollection.estimatedDocumentCount({
