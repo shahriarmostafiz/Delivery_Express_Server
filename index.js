@@ -66,7 +66,7 @@ app.post("/users", async (req, res) => {
   }
 });
 // mongo db code
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(process.env.URI, {
@@ -81,6 +81,7 @@ async function run() {
   try {
     // collections
     const usersCollection = client.db("dex").collection("users");
+    const bookingCollection = client.db("dex").collection("bookings");
 
     // middlewares
     const verifyToken = (req, res, next) => {
@@ -91,7 +92,7 @@ async function run() {
         return res.status(401).send({ message: "Access Forbidden" });
       }
       const token = authCode.split(" ")[1];
-      jwt.verify(token, SECRET, (err, decoded) => {
+      jwt.verify(token, process.env.TOKEN, (err, decoded) => {
         if (err) {
           return res.status(401).send({ message: "Access Forbidden" });
         }
@@ -112,14 +113,6 @@ async function run() {
         });
       }
       next();
-      //   const email = req.decoded.email;
-      //   const query = { email: email };
-      //   const user = await usersCollection.findOne(query);
-      //   const isAdmin = user?.role === "admin";
-      //   if (!isAdmin) {
-      //     return res.status(403).send({ message: "Forbidden" });
-      //   }
-      //   next();
     };
     const verifyDeliveryMan = async (req, res, next) => {
       const email = req.decoded.email;
@@ -146,6 +139,27 @@ async function run() {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
+    // update user info
+
+    app.put("/users/updatePhoto/:id", async (req, res) => {
+      const id = req.params.id;
+      const info = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+
+      const updatedDoc = {
+        $set: {
+          image: req.body.image,
+        },
+      };
+      const result = await usersCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
+
     app.post("/socialLoginUsers", async (req, res) => {
       const user = req.body;
       const email = user.email;
@@ -158,9 +172,18 @@ async function run() {
       res.send(result);
     });
 
-    // admin routes
+    // user role routes
+    app.get("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
 
-    app.get("/users/isadmin/:email", verifyToken, async (req, res) => {
+    app.get("/users/roles/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const tokenEmail = req.decoded.email;
       if (email !== tokenEmail) {
@@ -168,9 +191,43 @@ async function run() {
       }
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const admin = user.role === "admin";
+      const admin = user?.role === "admin";
+      const deliveryman = user?.role === "deliveryman";
       // if(!isAdmin)
-      return { admin };
+      res.send({ admin, deliveryman });
+      // return {  };
+    });
+
+    // booking apis
+    // post a booking
+    app.post("/addBooking", verifyToken, async (req, res) => {
+      const bookingData = req.body;
+      const result = await bookingCollection.insertOne(bookingData);
+      res.send(result);
+    });
+    // get booking
+    app.get("/bookings/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const tokenEmail = req.decoded.email;
+      if (email !== tokenEmail) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const role = user?.role;
+      if (role === "admin") {
+        const result = await bookingCollection.find().toArray();
+        return res.send(result);
+      }
+      if (role === "deliveryman") {
+        const filter = { deliverymanId: new ObjectId(user._id) };
+        const result = await bookingCollection.find(filter).toArray();
+        return res.send(result);
+      }
+      const result = await bookingCollection.find({ email: email }).toArray();
+
+      res.send(result);
     });
 
     // get the stats
