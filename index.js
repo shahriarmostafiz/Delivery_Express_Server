@@ -46,6 +46,12 @@ const userSchema = mongoose.Schema({
     type: String,
     required: true,
   },
+  bookingCount: {
+    type: Number,
+    default: 0,
+    required: true,
+  },
+  totalPayment: Number,
 });
 const user = new mongoose.model("User", userSchema);
 
@@ -135,23 +141,51 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     // get all  users
-    app.get("/users", verifyToken, async (req, res) => {
-      const result = await usersCollection.find().toArray();
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const result = await usersCollection
+        .find({ role: "user" })
+        .skip(page * limit)
+        .limit(limit)
+        .toArray();
       res.send(result);
     });
+
+    // all deliveryman
+    app.get(
+      "/users/deliveryman",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        console.log("deliveryman api was hit");
+        const query = { role: "deliveryman" };
+        const result = await usersCollection.find(query).toArray();
+        console.log("list of delivery man ", result);
+        res.send(result);
+      }
+    );
     // update user info
 
-    app.put("/users/updatePhoto/:id", async (req, res) => {
+    app.put("/users/update/:id", async (req, res) => {
       const id = req.params.id;
       const info = req.body;
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
+      let updatedDoc = { $set: {} };
+      if (req.body.image) {
+        updatedDoc.$set.image = req.body.image;
+      }
+      if (req.body.bookingCount) {
+        updatedDoc.$set.bookingCount = req.body.bookingCount;
+      }
+      if (req.body.totalPayment) {
+        updatedDoc.$set.totalPayment = req.body.totalPayment;
+      }
+      if (req.body.role) {
+        updatedDoc.$set.role = req.body.role;
+      }
 
-      const updatedDoc = {
-        $set: {
-          image: req.body.image,
-        },
-      };
       const result = await usersCollection.updateOne(
         filter,
         updatedDoc,
@@ -173,13 +207,19 @@ async function run() {
     });
 
     // user role routes
+    // get a user
     app.get("/users/:email", verifyToken, async (req, res) => {
+      console.log("user info api was hit ");
       const email = req.params.email;
       if (email !== req.decoded.email) {
+        console.log("erro was here ");
         return res.status(403).send({ message: "Forbidden" });
       }
+
       const query = { email: email };
+      console.log(query);
       const result = await usersCollection.findOne(query);
+      console.log(result);
       res.send(result);
     });
 
@@ -232,9 +272,9 @@ async function run() {
 
     // get the stats
     app.get("/stats", async (req, res) => {
-      const userTotal = await usersCollection.estimatedDocumentCount({
-        role: "user",
-      });
+      const userQuery = { role: "user" };
+      const userTotal = await usersCollection.countDocuments(userQuery);
+      console.log(userTotal);
       res.send({ userTotal });
     });
     // Send a ping to confirm a successful connection
