@@ -49,9 +49,20 @@ const userSchema = mongoose.Schema({
   bookingCount: {
     type: Number,
     default: 0,
-    required: true,
+    required: false,
   },
-  totalPayment: Number,
+  totalPayment: {
+    type: Number,
+    required: false,
+  },
+  parcelDelivered: {
+    type: Number,
+    required: false,
+  },
+  averageReview: {
+    type: Number,
+    required: false,
+  },
 });
 const user = new mongoose.model("User", userSchema);
 
@@ -165,8 +176,15 @@ async function run() {
         res.send(result);
       }
     );
-    // update user info
 
+    // get all bookings
+    // app.get("/allBooking", verifyToken, verifyAdmin, async (req, res) => {
+    //   const result = await bookingCollection.find().toArray();
+    //   res.send(result);
+    // });
+    // update a booking
+
+    // update user info
     app.put("/users/update/:id", async (req, res) => {
       const id = req.params.id;
       const info = req.body;
@@ -184,6 +202,10 @@ async function run() {
       }
       if (req.body.role) {
         updatedDoc.$set.role = req.body.role;
+        if (req.body.role === "deliveryman") {
+          updatedDoc.$set.averageReview = 0;
+          updatedDoc.$set.parcelDelivered = 0;
+        }
       }
 
       const result = await usersCollection.updateOne(
@@ -261,14 +283,76 @@ async function run() {
         return res.send(result);
       }
       if (role === "deliveryman") {
-        const filter = { deliverymanId: new ObjectId(user._id) };
+        console.log("deliveryman id", user._id);
+        const filter = { deliverymanId: user._id.toString() };
         const result = await bookingCollection.find(filter).toArray();
+        console.log("result for delivery man ", result);
         return res.send(result);
       }
       const result = await bookingCollection.find({ email: email }).toArray();
 
       res.send(result);
     });
+
+    // update a booking by admin
+    app.put(
+      "/bookings/update/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        // console.log(id);
+        console.log("update booking by admin  api was hit ");
+        const info = req.body;
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            status: info.status,
+            aprxDelivery: info.aprxDelivery,
+            deliverymanId: info.deliverymanId,
+          },
+        };
+        // const options = { upsert: true };
+        const options = { upsert: true };
+        const result = await bookingCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+        console.log(result);
+        res.send(result);
+      }
+    );
+
+    // update a booking by delivery man
+    app.put(
+      "/bookings/update/delivery/:id",
+      verifyToken,
+      verifyDeliveryMan,
+      async (req, res) => {
+        const id = req.params.id;
+        const info = req.body;
+        console.log(info);
+
+        const options = { upsert: true };
+
+        const filter = { _id: new ObjectId(id) };
+        // res.send({ message: "okay will update status soon " });
+
+        const updatedDoc = {
+          $set: {
+            status: info.status,
+          },
+        };
+        const result = await bookingCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
+    // update a booking by user
 
     // get the stats
     app.get("/stats", async (req, res) => {
