@@ -67,11 +67,11 @@ const userSchema = mongoose.Schema({
 const user = new mongoose.model("User", userSchema);
 
 app.post("/users", async (req, res) => {
-  console.log(req.body);
+  // console.log(req.body);
 
   try {
     const createdUser = await user.create(req.body);
-    console.log("user created");
+    // console.log("user created");
     res.status(200).json({
       message: "success",
     });
@@ -144,7 +144,7 @@ async function run() {
 
     app.post("/jwt", async (req, res) => {
       const user = req.body;
-      console.log(user);
+      // console.log(user);
       const token = jwt.sign(user, process.env.TOKEN, { expiresIn: "10h" });
       res.send({ token });
     });
@@ -169,10 +169,10 @@ async function run() {
       verifyToken,
       verifyAdmin,
       async (req, res) => {
-        console.log("deliveryman api was hit");
+        // console.log("deliveryman api was hit");
         const query = { role: "deliveryman" };
         const result = await usersCollection.find(query).toArray();
-        console.log("list of delivery man ", result);
+        // console.log("list of delivery man ", result);
         res.send(result);
       }
     );
@@ -234,17 +234,17 @@ async function run() {
     // user role routes
     // get a user
     app.get("/users/:email", verifyToken, async (req, res) => {
-      console.log("user info api was hit ");
+      // console.log("user info api was hit ");
       const email = req.params.email;
       if (email !== req.decoded.email) {
-        console.log("erro was here ");
+        // console.log("erro was here ");
         return res.status(403).send({ message: "Forbidden" });
       }
 
       const query = { email: email };
-      console.log(query);
+      // console.log(query);
       const result = await usersCollection.findOne(query);
-      console.log(result);
+      // console.log(result);
       res.send(result);
     });
 
@@ -286,10 +286,10 @@ async function run() {
         return res.send(result);
       }
       if (role === "deliveryman") {
-        console.log("deliveryman id", user._id);
+        // console.log("deliveryman id", user._id);
         const filter = { deliverymanId: user._id.toString() };
         const result = await bookingCollection.find(filter).toArray();
-        console.log("result for delivery man ", result);
+        // console.log("result for delivery man ", result);
         return res.send(result);
       }
       const result = await bookingCollection.find({ email: email }).toArray();
@@ -307,15 +307,20 @@ async function run() {
 
     // update a booking by admin
     app.put(
-      "/bookings/update/:id",
+      "/bookings/update/admin/:id",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        // console.log(id);
+        console.log(id);
+
         console.log("update booking by admin  api was hit ");
         const info = req.body;
+        console.log(info);
         const filter = { _id: new ObjectId(id) };
+        const ourData = await bookingCollection.findOne(filter);
+        console.log("our data", ourData);
+
         const updatedDoc = {
           $set: {
             status: info.status,
@@ -349,18 +354,41 @@ async function run() {
 
         const filter = { _id: new ObjectId(id) };
         // res.send({ message: "okay will update status soon " });
-
-        const updatedDoc = {
+        if (info.status === "cancelled") {
+          const updatedDoc = {
+            $set: {
+              status: info.status,
+            },
+          };
+          const result1 = await bookingCollection.updateOne(
+            filter,
+            updatedDoc,
+            options
+          );
+          return res.send(result1);
+        }
+        const updatedDoc2 = {
           $set: {
             status: info.status,
           },
         };
-        const result = await bookingCollection.updateOne(
+        const bookingResult = await bookingCollection.updateOne(
           filter,
-          updatedDoc,
+          updatedDoc2,
           options
         );
-        res.send(result);
+        const deliveryManUpdateDoc = {
+          $set: {
+            parcelDelivered: info.parcelDelivered,
+          },
+        };
+        const deliverymanFilter = { _id: new ObjectId(info.deliverymanId) };
+        const deliverymanResults = await usersCollection.updateOne(
+          deliverymanFilter,
+          deliveryManUpdateDoc,
+          options
+        );
+        res.send({ bookingResult, deliverymanResults });
       }
     );
     // update a booking by user
@@ -369,6 +397,7 @@ async function run() {
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
       const info = req.body;
+      console.log(info);
       // for cancelled status
       if (info.status === "cancelled") {
         const updatedDoc = {
@@ -385,8 +414,28 @@ async function run() {
         return res.send(result);
       }
       const updatedDoc = {
-        $set: {},
+        $set: {
+          price: info.price,
+          phone: info.phone,
+          type: info.type,
+          weight: info.weight,
+          reciever: info.reciever,
+          recieverPhone: info.recieverPhone,
+          address: info.address,
+          requestedDate: info.requestedDate,
+          latitude: info.latitude,
+          longitude: info.longitude,
+          updateDate: info.updateDate,
+        },
       };
+      const result = await bookingCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      console.log(result);
+      res.send(result);
+      // res.send({ message: "okay" });
     });
 
     // get the stats
