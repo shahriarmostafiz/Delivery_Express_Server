@@ -206,6 +206,9 @@ async function run() {
           updatedDoc.$set.averageReview = 0;
           updatedDoc.$set.parcelDelivered = 0;
         }
+        if (req.body.parcelDelivered) {
+          updatedDoc.$set.parcelDelivered = req.body.parcelDelivered;
+        }
       }
 
       const result = await usersCollection.updateOne(
@@ -294,6 +297,14 @@ async function run() {
       res.send(result);
     });
 
+    // get a booking
+    app.get("/bookings/booking/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookingCollection.findOne(query);
+      res.send(result);
+    });
+
     // update a booking by admin
     app.put(
       "/bookings/update/:id",
@@ -353,6 +364,30 @@ async function run() {
       }
     );
     // update a booking by user
+    app.put("/bookings/update/user/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const info = req.body;
+      // for cancelled status
+      if (info.status === "cancelled") {
+        const updatedDoc = {
+          $set: {
+            status: "info.status",
+          },
+        };
+
+        const result = await bookingCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+        return res.send(result);
+      }
+      const updatedDoc = {
+        $set: {},
+      };
+    });
 
     // get the stats
     app.get("/stats", async (req, res) => {
@@ -360,6 +395,45 @@ async function run() {
       const userTotal = await usersCollection.countDocuments(userQuery);
       console.log(userTotal);
       res.send({ userTotal });
+    });
+
+    // review api
+    app.put("/review/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const info = req.body;
+
+      console.log("req.body", info);
+
+      const deliveryman = await usersCollection.findOne(filter);
+      if (!deliveryman.reviews) {
+        deliveryman.reviews = [];
+      }
+      deliveryman.reviews.push({
+        user: info.user,
+        userImage: info.userImage,
+        rating: info.rating,
+        reviewText: info.reviewText,
+        bookingId: info.bookingId,
+      });
+
+      // console.log(deliveryman.reviews, "will be sent ");
+      // res.send({ message: "okay" });
+
+      const updatedDoc = {
+        $set: {
+          reviews: deliveryman.reviews,
+        },
+      };
+      const result = await usersCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+
+      // const updatedDoc =
     });
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
