@@ -10,6 +10,8 @@ app.use(cors());
 app.use(express.json());
 const port = process.env.PORT || 5000;
 
+const stripe = require("stripe")(process.env.STRIPE_KEY);
+
 // mongoose code
 // mongoose.connect()
 mongoose
@@ -438,12 +440,52 @@ async function run() {
       // res.send({ message: "okay" });
     });
 
+    // get a User booking
+    app.get("/bookings/:email/user", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      // const filterby = {}
+      console.log("API WAS HIT ");
+      const queryParam = req.query.myfilter;
+      const query = { email: email };
+      if (queryParam) {
+        query.status = queryParam;
+      }
+      console.log(query);
+    });
+
+    // get top 5 deliveryman
+    app.get("/topdeliveryman", async (req, res) => {
+      try {
+        const result = await usersCollection
+          .aggregate([
+            {
+              $match: { role: "deliveryman" },
+            },
+            { $addFields: { reviews: { $ifNull: ["$reviews", []] } } },
+            { $sort: { "reviews.rating": -1, parcelDelivered: -1 } },
+            { $limit: 5 },
+          ])
+          .toArray();
+
+        res.json(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "server error" });
+      }
+    });
+
     // get the stats
     app.get("/stats", async (req, res) => {
       const userQuery = { role: "user" };
       const userTotal = await usersCollection.countDocuments(userQuery);
-      console.log(userTotal);
-      res.send({ userTotal });
+      const parcelDelivered = await bookingCollection.countDocuments({
+        status: "delivered",
+      });
+      const allParcel = await bookingCollection.countDocuments();
+
+      // console.log(userTotal);
+      console.log(parcelDelivered);
+      res.send({ userTotal, parcelDelivered, allParcel });
     });
 
     // review api
@@ -483,6 +525,21 @@ async function run() {
       res.send(result);
 
       // const updatedDoc =
+    });
+
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+
+      const amount = parseInt(price * 100);
+      // const paymentIntent = await stripe.payment
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
