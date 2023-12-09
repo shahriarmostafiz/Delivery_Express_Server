@@ -4,4 +4,7 @@
 - MongoDB
 - Mongoose
 - Stripe
+- JWT
+- Cors
+
   
